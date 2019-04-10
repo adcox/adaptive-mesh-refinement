@@ -5,7 +5,8 @@ classdef Mesh < handle
         minCellSize = [1e-4, 1e-4];
         
         allNodes
-        allCells
+        
+        cellMap = containers.Map('KeyType', 'char', 'ValueType', 'any');
     end
     
     methods(Access = public)
@@ -52,23 +53,19 @@ classdef Mesh < handle
                     error('Template Cell must be derived from adaptiveMesh.Cell');
                 end
             end
-            
-            % Initialize storage array
-            temp( (S(1) - 1)*(S(2) - 1) ) = templateCell;
-            this.allCells = temp;
-            clear temp;
-            
-            % Fill storage array
-            n = 1;
+                        
+            % Populate cell map
             for r = 1:(S(1) - 1)
                 for c = 1:(S(2) - 1)
                     % Copy template to preserve all properties
-                    this.allCells(n) = copy(templateCell);
+                    cell = copy(templateCell);
                     
                     % Assume the node mesh is oriented properly in position
                     % space
-                    this.allCells(n).setNodes(nodeMesh(r:r+1, c:c+1));
-                    n = n + 1;
+                    cell.setNodes(nodeMesh(r:r+1, c:c+1));
+                    cell.setIndex([S(1) - 1 - r, c - 1 ]);
+                    
+                    this.cellMap(cell.getKey()) = cell;
                 end
             end
             
@@ -82,12 +79,17 @@ classdef Mesh < handle
             %   refine - refines the mesh using recursion, ending once the
             %   minimum cell size is reached or when all cells are uniform.
             %
-            %   refine(cells) - refines only the specified Cells.
+            %   refine(cells) - refines only the specified cell array of
+            %   Cell objects
             
             % When called without arguments, run on all the cells in the
             % mesh
             if(nargin == 1)
-                cells = this.allCells;
+                cells_cellArray = this.cellMap.values;
+                cells(length(cells_cellArray)) = cells_cellArray{end};
+                for c = 1:length(cells_cellArray)
+                    cells(c) = cells_cellArray{c};
+                end
             else
                 if(~isa(cells, 'adaptiveMesh.Cell'))
                     error('Cells must be derived from adpativeMesh.Cell');
@@ -96,19 +98,16 @@ classdef Mesh < handle
             
             for i = 1:length(cells)
                 if(~cells(i).isUniform())
-                    [newCells, newNodes] = cells(i).subdivide();
+                    [newCells, newNodes] = cells(i).subdivide(this);
 
                     if(~isempty(newCells) && ~isempty(newNodes))
-                        
-                        % Remove the subdivided cell from the master list
-                        ix = this.allCells == cells(i);
-                        this.allCells(ix) = [];
-                        delete(cells(i)); % Delete the object as well
-                        
+                                               
                         % Save the new Nodes and Cells
-                        this.allCells(end+1:end+length(newCells)) = newCells;
                         this.allNodes(end+1:end+length(newNodes)) = newNodes;
-
+                        
+                        for c = 1:length(newCells)
+                            this.cellMap(newCells(c).getKey()) = newCells(c);
+                        end
                         % Use recursion to continue; newCells and newNodes
                         % will be empty once the minimum cell size is
                         % reached, ending the recursion
@@ -128,10 +127,18 @@ classdef Mesh < handle
             end
             
             this.minCellSize = minSize;
+        end
+        
+        function cell = getCell(this, key)
             
-            for c = 1:length(this.allCells)
-                this.allCells(n).setMinWidth(minSize(1));
-                this.allCells(n).setMinHeight(minSize(2));
+            if(~isa(key, 'char'))
+                error('Key must be a character array');
+            end
+            
+            if(this.cellMap.isKey(key))
+                cell = this.cellMap(key);
+            else
+                cell = [];
             end
         end
     end

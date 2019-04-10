@@ -11,6 +11,11 @@
 classdef Cell < handle & matlab.mixin.Copyable
     
     properties(GetAccess = public, SetAccess = protected)
+        
+        level = 1;
+        
+        index = [0, 0];
+        
         % nodes - a matrix of nodes located at the corners of this cell
         %
         % The nodes are indexed by their location in cartesian space, i.e.,
@@ -21,6 +26,7 @@ classdef Cell < handle & matlab.mixin.Copyable
         %     |          |
         %   (2,1) ---- (2,2)
         nodes
+        
         
         % cellPosition - Location of the top-left node (1,1)
         cellPosition
@@ -96,15 +102,26 @@ classdef Cell < handle & matlab.mixin.Copyable
             end
         end
         
-        function [newCells, newNodes] = subdivide(this)
+        function [newCells, newNodes] = subdivide(this, mesh, bNeighborCatalyst)
             % subdivide - Split the cell into four smaller cells
             %
             %   [newCells, newNodes] = subdivide() subdivides the cell into
             %   four smaller cells as long as the new Cells do not violate
             %   the minimum width or minimum height properties of this
             %   Cell. The new Cells and new Nodes are returned 
+            
             if(isempty(this.nodes))
                 error('Nodes matrix is empty');
+            end
+            
+            if(~isa(mesh, 'adaptiveMesh.Mesh'))
+                error('Expecting an adaptiveMesh.Mesh');
+            end
+            
+            if(nargin < 3)
+                bNeighborCatalyst = false;
+            elseif(~islogical(bNeighborCatalyst))
+                error('bNeighborCatalyst must be logical (a boolean)');
             end
             
             if(this.cellSize(1)/2 > this.minWidth &&...
@@ -131,7 +148,11 @@ classdef Cell < handle & matlab.mixin.Copyable
                 node3 = copy(node0);
                 node4 = copy(node0);
                 
+                childIndices = this.getChildIndices();
+                
                 cellA = copy(this);
+                cellA.setLevel(this.level + 1);
+                
                 cellB = copy(cellA);
                 cellC = copy(cellA);
                 cellD = copy(cellA);
@@ -145,14 +166,35 @@ classdef Cell < handle & matlab.mixin.Copyable
                 
                 % Initialize new Cells, labeled in the ascii art above
                 cellA.setNodes([this.nodes(1,1), node1; node3, node0]);
+                cellA.setIndex(childIndices{1,1});
                 cellB.setNodes([node1, this.nodes(1,2); node0, node4]);
+                cellB.setIndex(childIndices{1,2});
                 cellC.setNodes([node3, node0; this.nodes(2,1), node2]);
+                cellC.setIndex(childIndices{2,1});
                 cellD.setNodes([node0, node4; node2, this.nodes(2,2)]);
-
+                cellD.setIndex(childIndices{2,2});
+                
                 % Output the new cells and nodes
                 this.isSubdivided = true;
                 newCells = [cellA, cellB, cellC, cellD];
-                newNodes = [node1, node3, node0, node4, node2];
+                newNodes = [node0, node1, node2, node3, node4];
+                
+                % Get the neighbors of this cell that are larger or the
+                % same size ONLY if this subdivision is not triggered by a
+                % neighbor
+                if(~bNeighborCatalyst)
+                    neighbors = this.getNeighbors(mesh, true);
+                    for n = 1:length(neighbors)
+                        [otherCells, otherNodes] = neighbors(n).subdivide(mesh, true);
+                        if(~isempty(otherCells))
+                            newCells(end+1:end+length(otherCells)) = otherCells;
+                        end
+                        if(~isempty(otherNodes))
+                            newNodes(end+1:end+length(otherNodes)) = otherNodes;
+                        end
+                    end
+                end
+                
             else
                 this.isSubdivided = false;
                 newCells = [];
@@ -199,7 +241,118 @@ classdef Cell < handle & matlab.mixin.Copyable
             % See also: setMinWidth, subdivide
             this.minHeight = minHeight;
         end
+        
+        function setLevel(this, level)            
+            this.level = level;
+        end
+        
+        function setIndex(this, index)
+            if(size(index,1)*size(index,2) ~= 2)
+                error('Expecting 2-element array');
+            end
+            this.index = index;
+        end
+        
+        function childIndices = getChildIndices(this)
+            % getChildIndices - returns the indices of the child cells
+            %
+            %   childIndices = getChildIndices returns a 2x2 matrix of
+            %   2-element arrays; each aray is the index of a child cell,
+            %   arranged in spatial order:
+            %
+            %       o --- o --- o
+            %       |  A  |  B  |
+            %       o --- o --- o
+            %       |  C  |  D  |
+            %       o --- o --- o 
+            
+            if(length(this.index) < 2)
+                keyboard;
+            end
+            
+            childIndices = cell(2,2);
+            childIndices{1,1} = [2*this.index(1) + 0, 2*this.index(2) + 1];
+            childIndices{1,2} = [2*this.index(1) + 1, 2*this.index(2) + 1];
+            childIndices{2,1} = [2*this.index(1) + 0, 2*this.index(2) + 0];
+            childIndices{2,2} = [2*this.index(1) + 1, 2*this.index(2) + 0];
+        end
+        
+        function parentIndex = getParentIndex(this)
+            parentIndex = adaptiveMesh.Cell.computeParentIndex(this.index);
+        end
+        
+        function key = getKey(this)
+            key = adaptiveMesh.Cell.computeKey(this.index);
+        end
+        
+        function neighbors = getNeighbors(this, mesh, bNoSmaller)
+            sameLevelNeighbors = [this.index(1) - 1, this.index(2); % left
+                this.index(1), this.index(2) + 1; % top
+                this.index(1) + 1, this.index(2); % right
+                this.index(1), this.index(2) - 1]; % bottom
+            
+            neighbors = this;
+            neighbors(1) = [];
+            
+            for n = 1:4
+                neighbor = mesh.getCell(...
+                    adaptiveMesh.Cell.computeKey(sameLevelNeighbors(n,:)));
+                
+                if(~isempty(neighbor))
+                    if(~bNoSmaller && neighbor.isSubdivided)
+                        kidsIx = neighbor.getChildIndices();
+
+                        switch(n)
+                            case 1
+                                % Neighbor is to the left, get right-side
+                                neighbors(end+1:end+3) =...
+                                    [mesh.getCell(adaptiveMesh.Cell.computeKey(kidsIx(1,2))),...
+                                    mesh.getCell(adaptiveMesh.Cell.computeKey(kidsIx(2,2)))];
+                            case 2
+                                % Neighbor is above, get bottom-side
+                                neighbors(end+1:end+3) =...
+                                    [mesh.getCell(adaptiveMesh.Cell.computeKey(kidsIx(2,1))),...
+                                    mesh.getCell(adaptiveMesh.Cell.computeKey(kidsIx(2,2)))];
+                            case 3
+                                % Neighbor is to the right, get left-side
+                                neighbors(end+1:end+3) =...
+                                	[mesh.getCell(adaptiveMesh.Cell.computeKey(kidsIx(1,1))),...
+                                    mesh.getCell(adaptiveMesh.Cell.computeKey(kidsIx(2,1)))];
+                            case 4
+                                % Neighbor is below, get top-side
+                                neighbors(end+1:end+3) =...
+                                    [mesh.getCell(adaptiveMesh.Cell.computeKey(kidsIx(1,1))),...
+                                    mesh.getCell(adaptiveMesh.Cell.computeKey(kidsIx(1,2)))];
+                        end
+                        
+                    else
+                        neighbors(end+1) = neighbor;
+                    end
+                elseif(this.level > 0)
+                    % Try the parent of the non-existent neighboring cell
+                    neighborParent = mesh.getCell(adaptiveMesh.Cell.computeKey(...
+                        adaptiveMesh.Cell.computeParentIndex(sameLevelNeighbors(n,:))));
+                    
+                    if(~isempty(neighborParent))
+                        % If the lower-level cell exists, output it
+                        neighbors(end+1) = neighborParent;
+                        % If the lower-level cell does NOT exist, this cell
+                        % is on the edge of the mesh
+                    end
+                end
+            end
+        end
     end % End of public methods
+    
+    methods(Static, Access = public)
+        function key = computeKey(index)
+            key = sprintf('%d,%d', index);
+        end
+        
+        function parentIndex = computeParentIndex(childIndex)
+            parentIndex = [floor(childIndex(1)/2), floor(childIndex(2)/2)];
+        end
+    end
     
     methods(Access = protected)
         function cpObj = copyElement(this)
