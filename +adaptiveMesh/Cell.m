@@ -28,12 +28,12 @@ classdef Cell < handle & matlab.mixin.Copyable
         nodes
         
         
-        % cellPosition - Location of the top-left node (1,1)
-        cellPosition
+        % position - Location of the top-left node (1,1)
+        position
         
-        % cellSize - the [width, height] of the cell in position
+        % size - the [width, height] of the cell in position
         % coordinates
-        cellSize
+        size
         
         % Minimum acceptable width
         %
@@ -51,6 +51,9 @@ classdef Cell < handle & matlab.mixin.Copyable
         isSubdivided = false;
     end
     
+    % %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    % Public Methods
+    % %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     methods(Access = public)
         
         function this = Cell(nodes)
@@ -107,10 +110,10 @@ classdef Cell < handle & matlab.mixin.Copyable
             r1 = this.nodes(1,1).getPosition();
             r2 = this.nodes(1,2).getPosition();
             r3 = this.nodes(2,1).getPosition();
-            this.cellPosition = r3;
-            this.cellSize = [r2(1) - r1(1), r1(2) - r3(2)];
+            this.position = r3;
+            this.size = [r2(1) - r1(1), r1(2) - r3(2)];
 
-            if(this.cellSize(1) < 0 || this.cellSize(2) < 0)
+            if(this.size(1) < 0 || this.size(2) < 0)
                 error('Nodes are not in correct order');
             end
         end
@@ -145,12 +148,12 @@ classdef Cell < handle & matlab.mixin.Copyable
                 error('bNeighborCatalyst must be logical (a boolean)');
             end
             
-            if(this.cellSize(1)/2 > this.minWidth &&...
-                    this.cellSize(2)/2 > this.minHeight)
+            if(this.size(1)/2 > this.minWidth &&...
+                    this.size(2)/2 > this.minHeight)
                 
                 % Coordinates of the center of the cell
-                xMid = this.cellPosition(1) + 0.5*this.cellSize(1);
-                yMid = this.cellPosition(2) + 0.5*this.cellSize(2);
+                xMid = this.position(1) + 0.5*this.size(1);
+                yMid = this.position(2) + 0.5*this.size(2);
                 
                 % Make copies of one Node and this Cell to preserve their
                 % properties in the new Nodes and Cells. The new Nodes and
@@ -158,16 +161,24 @@ classdef Cell < handle & matlab.mixin.Copyable
                 % represeted by "o", new nodes represented by numbers, and
                 % new cells represented by numbers:
                 %
-                %   o --- 1 --- o
+                %   o --- 2 --- o
                 %   |  A  |  B  |
-                %   3 --- 0 --- 4
+                %   4 --- 1 --- 5
                 %   |  C  |  D  |
-                %   o --- 2 --- o   
-                node0 = copy(this.nodes(1,1));
-                node1 = copy(node0);
-                node2 = copy(node0);
-                node3 = copy(node0);
-                node4 = copy(node0);
+                %   o --- 3 --- o
+                newNodes = [copy(this.nodes(1,1)), copy(this.nodes(1,1)), ...
+                    copy(this.nodes(1,1)), copy(this.nodes(1,1)), ...
+                    copy(this.nodes(1,1))];
+                
+                newNodePos = [xMid, yMid;
+                    xMid, this.position(2) + this.size(2);
+                    xMid, this.position(2);
+                    this.position(1), yMid
+                    this.position(1) + this.size(1), yMid];
+
+                for n = 1:5
+                    newNodes(n).setState(newNodePos(n,:));
+                end
                 
                 childIndices = this.getChildIndices();
                 
@@ -178,27 +189,19 @@ classdef Cell < handle & matlab.mixin.Copyable
                 cellC = copy(cellA);
                 cellD = copy(cellA);
                 
-                % Initialize new nodes (#) between the exiting nodes (o):        
-                node0.setState([xMid, yMid]);
-                node1.setState([xMid, this.cellPosition(2) + this.cellSize(2)]);
-                node2.setState([xMid, this.cellPosition(2)]);
-                node3.setState([this.cellPosition(1), yMid]);
-                node4.setState([this.cellPosition(1) + this.cellSize(1), yMid]);
-                
                 % Initialize new Cells, labeled in the ascii art above
-                cellA.setNodes([this.nodes(1,1), node1; node3, node0]);
+                cellA.setNodes([this.nodes(1,1), newNodes(2); newNodes(4), newNodes(1)]);
                 cellA.setIndex(childIndices{1,1});
-                cellB.setNodes([node1, this.nodes(1,2); node0, node4]);
+                cellB.setNodes([newNodes(2), this.nodes(1,2); newNodes(1), newNodes(5)]);
                 cellB.setIndex(childIndices{1,2});
-                cellC.setNodes([node3, node0; this.nodes(2,1), node2]);
+                cellC.setNodes([newNodes(4), newNodes(1); this.nodes(2,1), newNodes(3)]);
                 cellC.setIndex(childIndices{2,1});
-                cellD.setNodes([node0, node4; node2, this.nodes(2,2)]);
+                cellD.setNodes([newNodes(1), newNodes(5); newNodes(3), this.nodes(2,2)]);
                 cellD.setIndex(childIndices{2,2});
                 
                 % Output the new cells and nodes
                 this.isSubdivided = true;
                 newCells = [cellA, cellB, cellC, cellD];
-                newNodes = [node0, node1, node2, node3, node4];
                 
                 % Get the neighbors of this cell that are larger or the
                 % same size
@@ -306,12 +309,20 @@ classdef Cell < handle & matlab.mixin.Copyable
                 this.index(1) + 1, this.index(2); % right
                 this.index(1), this.index(2) - 1]; % bottom
             
+            % The largest index for a cell at the same level
+            maxIndex = 2^this.level - 1;
+            
             neighbors = this;
             neighbors(1) = [];
             
             for n = 1:4
-                neighbor = mesh.getCell(...
-                    adaptiveMesh.Cell.computeKey(this.level, sameLevelNeighbors(n,:)));
+                if(sum(sameLevelNeighbors(n,:) < 0) == 0 && ...
+                        sum(sameLevelNeighbors(n,:) > maxIndex) == 0)
+                    neighbor = mesh.getCell(...
+                        adaptiveMesh.Cell.computeKey(this.level, sameLevelNeighbors(n,:)));
+                else
+                    neighbor = [];
+                end
                 
                 if(~isempty(neighbor))
                     if(~bNoSmaller && neighbor.isSubdivided)
@@ -343,28 +354,61 @@ classdef Cell < handle & matlab.mixin.Copyable
                     else
                         neighbors(end+1) = neighbor;
                     end
-                elseif(this.level > 0)
-                    % Try the parent of the non-existent neighboring cell
-                    myParentKey = adaptiveMesh.Cell.computeKey(this.level-1,...
-                        adaptiveMesh.Cell.computeParentIndex(this.index));
-                    parentKey = adaptiveMesh.Cell.computeKey(this.level-1,...
-                        adaptiveMesh.Cell.computeParentIndex(sameLevelNeighbors(n,:)));
-                    
-                    if(parentKey ~= myParentKey)
-                        neighborParent = mesh.getCell(parentKey);
-
-                        if(~isempty(neighborParent))
-                            % If the lower-level cell exists, output it
-                            neighbors(end+1) = neighborParent;
-                            % If the lower-level cell does NOT exist, this cell
-                            % is on the edge of the mesh
+                else
+                    L = this.level - 1;
+                    myIndex = this.index;
+                    neighborIndex = sameLevelNeighbors(n,:);
+                    while(L > 0)
+                        maxParentIndex = 2^L - 1;
+                        
+                        % Try the parant of the non-existent neighboring
+                        % cell
+                        myParentIndex = this.computeParentIndex(myIndex);
+                        neighborParentIndex = this.computeParentIndex(neighborIndex);
+                        
+                        % If neighbor has the same parent as me
+                        if(sum(myParentIndex == neighborParentIndex) == 2)
+                            break;
                         end
+                        
+                        % Make sure the neighbor parent index is in bounds
+                        if(sum(neighborParentIndex < 0) == 0 &&...
+                                sum(neighborParentIndex > maxParentIndex) == 0)
+                            
+                            neighborParent = mesh.getCell(...
+                                this.computeKey(L, neighborParentIndex));
+                            
+                            if(~isempty(neighborParent))
+                                % If the lower-level cell exists, output it
+                                neighbors(end+1) = neighborParent;
+                                % exit the loop since we found a neighbor;
+                                % if no neighbor is found, continue looking
+                                % up at higher levels
+                                break;
+                            end
+                        end
+                        myIndex = myParentIndex;
+                        neighborIndex = neighborParentIndex;
+                        L = L - 1;
                     end
                 end
             end
-        end
+            
+            % Debugging: plot neighbors:
+%             figure(); hold on;
+%             rectangle('position', [this.position, this.size], 'edgecolor', 'b',...
+%                 'linewidth', 2);
+%             for n = 1:length(neighbors)
+%                 rectangle('position', [neighbors(n).position, neighbors(n).size], ...
+%                     'edgecolor', 'r', 'linewidth', 1);
+%             end
+%             keyboard;
+        end % End of getNeighbors()
     end % End of public methods
     
+    % %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    % Static Public Methods
+    % %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     methods(Static, Access = public)
         function key = computeKey(level, index)
             key = 0;
@@ -379,6 +423,9 @@ classdef Cell < handle & matlab.mixin.Copyable
         end
     end
     
+    % %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    % Protected Methods
+    % %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     methods(Access = protected)
         function cpObj = copyElement(this)
             

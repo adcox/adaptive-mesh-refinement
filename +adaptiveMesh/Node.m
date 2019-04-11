@@ -17,6 +17,9 @@ classdef Node < handle & matlab.mixin.Copyable
         metric
     end
     
+    % %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    % Public Methods
+    % %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     methods(Access = public)
         
         function this = Node(state)
@@ -62,6 +65,21 @@ classdef Node < handle & matlab.mixin.Copyable
             %
             %   metric = getMetric() returns the metric for this node.
             metric = this.metric;
+        end
+        
+        function key = getKey(this, mesh)
+            key = adaptiveMesh.Node.computeKey(mesh, this.getPosition());
+        end
+    end
+    
+    % %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    % Static Public Methods
+    % %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    methods(Static, Access = public)
+        function key = computeKey(mesh, position)
+            widthIndex = round( (position(1) - mesh.position(1))/mesh.trueMinCellSize(1), 0);
+            heightIndex = round( (position(2) - mesh.position(2))/mesh.trueMinCellSize(2), 0);
+            key = sprintf('%d,%d', widthIndex, heightIndex);
         end
     end
 end
