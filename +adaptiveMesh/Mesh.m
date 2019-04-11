@@ -2,17 +2,60 @@
 classdef Mesh < handle
     
     properties(GetAccess = public, SetAccess = protected)
+        
+        minDepth
+        
         minCellSize = [1e-4, 1e-4];
         
         allNodes
         
-        cellMap = containers.Map('KeyType', 'char', 'ValueType', 'any');
+        cellMap
+        
+        vis = struct('bVisualize', false,...
+            'hFig', [],...
+            'hAx', [],...
+            'colors', [],...
+            'cLim', []);
     end
     
     methods(Access = public)
         
-        function this = Mesh()
+        function this = Mesh(minDepth)
+            if(nargin == 0)
+                this.minDepth = 3;
+            else
+                this.minDepth =  minDepth;
+            end
             
+            this.cellMap = containers.Map('KeyType', 'int32', 'ValueType', 'any');
+            
+            if(this.vis.bVisualize)
+                this.vis.hFig = figure();
+                this.vis.hAx = gca;
+                this.vis.colors = lines(7);
+                colormap(this.vis.colors);
+                title(this.vis.hAx, 'Mesh Visualization');
+                hold(this.vis.hAx, 'on');
+                colorbar(this.vis.hAx);
+            end
+        end
+        
+        function delete(this)
+            % Delete all the cells
+            keys = this.cellMap.keys;
+            for k = 1:length(keys)
+                cell = this.cellMap(keys{k});
+                if(isvalid(cell))
+                    delete(cell);
+                end
+            end
+            delete(this.cellMap);
+            
+            for n = 1:length(this.allNodes)
+                if(isvalid(this.allNodes(n)))
+                    delete(this.allNodes(n));
+                end
+            end
         end
         
         function initMesh(this, nodeMesh, templateCell)
@@ -64,16 +107,33 @@ classdef Mesh < handle
                     % space
                     cell.setNodes(nodeMesh(r:r+1, c:c+1));
                     cell.setIndex([S(1) - 1 - r, c - 1 ]);
+                    if(this.vis.bVisualize)
+                        rectangle(this.vis.hAx, 'position', [cell.cellPosition,...
+                            cell.cellSize], 'edgecolor', 'k');
+                    end
                     
+                    if(this.cellMap.isKey(cell.getKey()))
+                        error('Duplicate key: %d', cell.getKey());
+                    end
                     this.cellMap(cell.getKey()) = cell;
                 end
             end
             
             % Store nodes
             this.allNodes = reshape(nodeMesh, 1, S(1)*S(2));
+            if(this.vis.bVisualize)
+                q = zeros(length(this.allNodes), 3);
+                for n = 1:length(this.allNodes)
+                    q(n,:) = [this.allNodes(n).state(1:2),...
+                        this.allNodes(n).getMetric()];
+                end
+                this.vis.cLim = [min(q(:,3)), max(q(:,3))];
+                scatter(q(:,1), q(:,2), 25, q(:,3), 'filled');
+                caxis(this.vis.hAx, this.vis.cLim);
+            end
         end
         
-        function refine(this, cells)
+        function refine(this, cells, depth)
             % refine - Recursively refine the mesh
             %
             %   refine - refines the mesh using recursion, ending once the
@@ -84,7 +144,7 @@ classdef Mesh < handle
             
             % When called without arguments, run on all the cells in the
             % mesh
-            if(nargin == 1)
+            if(nargin < 2)
                 cells_cellArray = this.cellMap.values;
                 cells(length(cells_cellArray)) = cells_cellArray{end};
                 for c = 1:length(cells_cellArray)
@@ -96,22 +156,46 @@ classdef Mesh < handle
                 end
             end
             
+            if(nargin < 3)
+                depth = 0;
+            end
+            
             for i = 1:length(cells)
-                if(~cells(i).isUniform())
-                    [newCells, newNodes] = cells(i).subdivide(this);
+                if(depth < this.minDepth || ~cells(i).isUniform())
+                    [newCells, newNodes] = cells(i).subdivide(this, depth >= this.minDepth);
 
                     if(~isempty(newCells) && ~isempty(newNodes))
-                                               
+                       
+                        if(this.vis.bVisualize)
+                            for c = 1:length(newCells)
+                                rectangle(this.vis.hAx, 'position',...
+                                    [newCells(c).cellPosition, newCells(c).cellSize],...
+                                    'edgecolor', 'k');
+                            end
+                            q = zeros(length(newNodes), 3);
+                            for n = 1:length(newNodes)
+                                q(n,:) = [newNodes(n).state(1:2), newNodes(n).getMetric()];
+                            end
+                            this.vis.cLim(1) = min(min(q(:,3)), this.vis.cLim(1));
+                            this.vis.cLim(2) = max(max(q(:,3)), this.vis.cLim(2));
+                            scatter(this.vis.hAx, q(:,1), q(:,2), 25, q(:,3), 'filled');
+                            caxis(this.vis.hAx, this.vis.cLim);
+                        end
+                        
                         % Save the new Nodes and Cells
                         this.allNodes(end+1:end+length(newNodes)) = newNodes;
                         
                         for c = 1:length(newCells)
+                            if(this.cellMap.isKey(newCells(c).getKey()))
+                                error('Duplicate key: %d', newCells(c).getKey());
+                            end
                             this.cellMap(newCells(c).getKey()) = newCells(c);
                         end
+                        
                         % Use recursion to continue; newCells and newNodes
                         % will be empty once the minimum cell size is
                         % reached, ending the recursion
-                        this.refine(newCells);
+                        this.refine(newCells, depth + 1);
                     end
                 end
             end
@@ -131,8 +215,8 @@ classdef Mesh < handle
         
         function cell = getCell(this, key)
             
-            if(~isa(key, 'char'))
-                error('Key must be a character array');
+            if(~isa(key, 'int32'))
+                error('Key must be an int32');
             end
             
             if(this.cellMap.isKey(key))

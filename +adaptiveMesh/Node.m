@@ -9,12 +9,12 @@ classdef Node < handle & matlab.mixin.Copyable
     
     properties(GetAccess = public, SetAccess = protected)
         % state - the Node state, initially an empty array
-        state = [];
+        state
     end
     
     properties(Access = protected)
         % metric - the Node metric, initially an empty array
-        metric = [];
+        metric
     end
     
     methods(Access = public)
@@ -30,7 +30,11 @@ classdef Node < handle & matlab.mixin.Copyable
             %   specified state (a row vector).
             if(nargin > 0)
                 this.state = state;
+            else
+                this.state = [];
             end
+            
+            this.metric = [];
         end
         
         function setState(this, state)

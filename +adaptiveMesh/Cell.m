@@ -12,9 +12,9 @@ classdef Cell < handle & matlab.mixin.Copyable
     
     properties(GetAccess = public, SetAccess = protected)
         
-        level = 1;
+        level
         
-        index = [0, 0];
+        index
         
         % nodes - a matrix of nodes located at the corners of this cell
         %
@@ -68,6 +68,19 @@ classdef Cell < handle & matlab.mixin.Copyable
             if(nargin > 0)
                 this.setNodes(nodes)
             end
+            
+            this.isSubdivided = false;
+            this.index = [0,0];
+            this.level = 0;
+        end
+        
+        function delete(this)
+            % Cell destructor
+            for n = 1:length(this.nodes)
+                if(isvalid(this.nodes(n)))
+                    delete(this.nodes(n));
+                end
+            end
         end
         
         function setNodes(this, nodes)
@@ -102,13 +115,21 @@ classdef Cell < handle & matlab.mixin.Copyable
             end
         end
         
-        function [newCells, newNodes] = subdivide(this, mesh, bNeighborCatalyst)
+        function [newCells, newNodes] = subdivide(this, mesh, bCueNeighbors)
             % subdivide - Split the cell into four smaller cells
             %
             %   [newCells, newNodes] = subdivide() subdivides the cell into
             %   four smaller cells as long as the new Cells do not violate
             %   the minimum width or minimum height properties of this
             %   Cell. The new Cells and new Nodes are returned 
+            
+            newCells = [];
+            newNodes = [];
+                
+            % Skip if this cell has already been subdivided
+            if(this.isSubdivided)
+                return;
+            end
             
             if(isempty(this.nodes))
                 error('Nodes matrix is empty');
@@ -119,8 +140,8 @@ classdef Cell < handle & matlab.mixin.Copyable
             end
             
             if(nargin < 3)
-                bNeighborCatalyst = false;
-            elseif(~islogical(bNeighborCatalyst))
+                bCueNeighbors = false;
+            elseif(~islogical(bCueNeighbors))
                 error('bNeighborCatalyst must be logical (a boolean)');
             end
             
@@ -180,12 +201,11 @@ classdef Cell < handle & matlab.mixin.Copyable
                 newNodes = [node0, node1, node2, node3, node4];
                 
                 % Get the neighbors of this cell that are larger or the
-                % same size ONLY if this subdivision is not triggered by a
-                % neighbor
-                if(~bNeighborCatalyst)
+                % same size
+                if(bCueNeighbors)
                     neighbors = this.getNeighbors(mesh, true);
                     for n = 1:length(neighbors)
-                        [otherCells, otherNodes] = neighbors(n).subdivide(mesh, true);
+                        [otherCells, otherNodes] = neighbors(n).subdivide(mesh, false);
                         if(~isempty(otherCells))
                             newCells(end+1:end+length(otherCells)) = otherCells;
                         end
@@ -194,11 +214,6 @@ classdef Cell < handle & matlab.mixin.Copyable
                         end
                     end
                 end
-                
-            else
-                this.isSubdivided = false;
-                newCells = [];
-                newNodes = [];
             end
         end
         
@@ -282,7 +297,7 @@ classdef Cell < handle & matlab.mixin.Copyable
         end
         
         function key = getKey(this)
-            key = adaptiveMesh.Cell.computeKey(this.index);
+            key = adaptiveMesh.Cell.computeKey(this.level, this.index);
         end
         
         function neighbors = getNeighbors(this, mesh, bNoSmaller)
@@ -296,7 +311,7 @@ classdef Cell < handle & matlab.mixin.Copyable
             
             for n = 1:4
                 neighbor = mesh.getCell(...
-                    adaptiveMesh.Cell.computeKey(sameLevelNeighbors(n,:)));
+                    adaptiveMesh.Cell.computeKey(this.level, sameLevelNeighbors(n,:)));
                 
                 if(~isempty(neighbor))
                     if(~bNoSmaller && neighbor.isSubdivided)
@@ -306,23 +321,23 @@ classdef Cell < handle & matlab.mixin.Copyable
                             case 1
                                 % Neighbor is to the left, get right-side
                                 neighbors(end+1:end+3) =...
-                                    [mesh.getCell(adaptiveMesh.Cell.computeKey(kidsIx(1,2))),...
-                                    mesh.getCell(adaptiveMesh.Cell.computeKey(kidsIx(2,2)))];
+                                    [mesh.getCell(adaptiveMesh.Cell.computeKey(this.level+1, kidsIx(1,2))),...
+                                    mesh.getCell(adaptiveMesh.Cell.computeKey(this.level+1, kidsIx(2,2)))];
                             case 2
                                 % Neighbor is above, get bottom-side
                                 neighbors(end+1:end+3) =...
-                                    [mesh.getCell(adaptiveMesh.Cell.computeKey(kidsIx(2,1))),...
-                                    mesh.getCell(adaptiveMesh.Cell.computeKey(kidsIx(2,2)))];
+                                    [mesh.getCell(adaptiveMesh.Cell.computeKey(this.level+1, kidsIx(2,1))),...
+                                    mesh.getCell(adaptiveMesh.Cell.computeKey(this.level+1, kidsIx(2,2)))];
                             case 3
                                 % Neighbor is to the right, get left-side
                                 neighbors(end+1:end+3) =...
-                                	[mesh.getCell(adaptiveMesh.Cell.computeKey(kidsIx(1,1))),...
-                                    mesh.getCell(adaptiveMesh.Cell.computeKey(kidsIx(2,1)))];
+                                	[mesh.getCell(adaptiveMesh.Cell.computeKey(this.level+1, kidsIx(1,1))),...
+                                    mesh.getCell(adaptiveMesh.Cell.computeKey(this.level+1, kidsIx(2,1)))];
                             case 4
                                 % Neighbor is below, get top-side
                                 neighbors(end+1:end+3) =...
-                                    [mesh.getCell(adaptiveMesh.Cell.computeKey(kidsIx(1,1))),...
-                                    mesh.getCell(adaptiveMesh.Cell.computeKey(kidsIx(1,2)))];
+                                    [mesh.getCell(adaptiveMesh.Cell.computeKey(this.level+1, kidsIx(1,1))),...
+                                    mesh.getCell(adaptiveMesh.Cell.computeKey(this.level+1, kidsIx(1,2)))];
                         end
                         
                     else
@@ -330,14 +345,20 @@ classdef Cell < handle & matlab.mixin.Copyable
                     end
                 elseif(this.level > 0)
                     % Try the parent of the non-existent neighboring cell
-                    neighborParent = mesh.getCell(adaptiveMesh.Cell.computeKey(...
-                        adaptiveMesh.Cell.computeParentIndex(sameLevelNeighbors(n,:))));
+                    myParentKey = adaptiveMesh.Cell.computeKey(this.level-1,...
+                        adaptiveMesh.Cell.computeParentIndex(this.index));
+                    parentKey = adaptiveMesh.Cell.computeKey(this.level-1,...
+                        adaptiveMesh.Cell.computeParentIndex(sameLevelNeighbors(n,:)));
                     
-                    if(~isempty(neighborParent))
-                        % If the lower-level cell exists, output it
-                        neighbors(end+1) = neighborParent;
-                        % If the lower-level cell does NOT exist, this cell
-                        % is on the edge of the mesh
+                    if(parentKey ~= myParentKey)
+                        neighborParent = mesh.getCell(parentKey);
+
+                        if(~isempty(neighborParent))
+                            % If the lower-level cell exists, output it
+                            neighbors(end+1) = neighborParent;
+                            % If the lower-level cell does NOT exist, this cell
+                            % is on the edge of the mesh
+                        end
                     end
                 end
             end
@@ -345,8 +366,12 @@ classdef Cell < handle & matlab.mixin.Copyable
     end % End of public methods
     
     methods(Static, Access = public)
-        function key = computeKey(index)
-            key = sprintf('%d,%d', index);
+        function key = computeKey(level, index)
+            key = 0;
+            for l = 0:level-1
+                key = key + (2^l * 2^l);
+            end
+            key = int32(key + index(1)*2^level + index(2));
         end
         
         function parentIndex = computeParentIndex(childIndex)
