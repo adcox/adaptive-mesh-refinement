@@ -53,6 +53,10 @@ classdef Cell < handle & matlab.mixin.Copyable
         isSubdivided = false;
     end
     
+    properties(Access = protected)
+        key
+    end
+    
     % %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     % Public Methods
     % %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -77,6 +81,7 @@ classdef Cell < handle & matlab.mixin.Copyable
             this.isSubdivided = false;
             this.index = [0,0];
             this.level = 0;
+            this.key = [];
         end
         
         function delete(this)
@@ -272,6 +277,7 @@ classdef Cell < handle & matlab.mixin.Copyable
             %   <https://doi.org/10.1016/j.jcp.2010.08.023>
             
             this.level = level;
+            this.key = []; % reset - must be recomputed
         end
         
         function setIndex(this, index)
@@ -285,6 +291,7 @@ classdef Cell < handle & matlab.mixin.Copyable
                 error('Expecting 2-element array');
             end
             this.index = index;
+            this.key = []; % reset - must be recomputed
         end
         
         function childIndices = getChildIndices(this)
@@ -331,7 +338,10 @@ classdef Cell < handle & matlab.mixin.Copyable
             %   key = getKey()
             %
             % See also: computeKey
-            key = adaptiveMesh.Cell.computeKey(this.level, this.index);
+            if(isempty(this.key))
+                this.key = adaptiveMesh.Cell.computeKey(this.level, this.index);
+            end
+            key = this.key;
         end
         
         function neighbors = getNeighbors(this, mesh, bNoSmaller)
@@ -458,11 +468,12 @@ classdef Cell < handle & matlab.mixin.Copyable
             %   described in the paper,
             %   <https://doi.org/10.1016/j.jcp.2010.08.023>
             
-            key = 0;
+            val = 0;
             for l = 0:level-1
-                key = key + (2^l * 2^l);
+                val = val + (2^l * 2^l);
             end
-            key = int32(key + index(1)*2^level + index(2));
+            val = val + index(1)*2^level + index(2);
+            key = sprintf('i%d', int32(val));
         end
         
         function parentIndex = computeParentIndex(childIndex)

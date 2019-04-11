@@ -18,6 +18,9 @@ classdef Node < handle & matlab.mixin.Copyable
     properties(Access = protected)
         % metric - the Node metric, initially an empty array
         metric
+        
+        % key - unique key representing the Node
+        key
     end
     
     % %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -41,6 +44,7 @@ classdef Node < handle & matlab.mixin.Copyable
             end
             
             this.metric = [];
+            this.key = [];
         end
         
         function setState(this, state)
@@ -48,6 +52,8 @@ classdef Node < handle & matlab.mixin.Copyable
             %
             %   setState(state)
             this.state = state;
+            this.metric = []; % reset - must be recomputed
+            this.key = []; % reset - must be recomputed
         end
         
         function pos = getPosition(this)
@@ -71,7 +77,10 @@ classdef Node < handle & matlab.mixin.Copyable
         end
         
         function key = getKey(this, mesh)
-            key = adaptiveMesh.Node.computeKey(mesh, this.getPosition());
+            if(isempty(this.key))
+                this.key = adaptiveMesh.Node.computeKey(mesh, this.getPosition());
+            end
+            key = this.key;
         end
     end
     
@@ -82,7 +91,7 @@ classdef Node < handle & matlab.mixin.Copyable
         function key = computeKey(mesh, position)
             widthIndex = round( (position(1) - mesh.position(1))/mesh.trueMinCellSize(1), 0);
             heightIndex = round( (position(2) - mesh.position(2))/mesh.trueMinCellSize(2), 0);
-            key = sprintf('%d,%d', widthIndex, heightIndex);
+            key = sprintf('i%d_%d', widthIndex, heightIndex);
         end
     end
 end

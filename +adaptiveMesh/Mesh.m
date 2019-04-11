@@ -36,7 +36,7 @@ classdef Mesh < handle
         nodeMap
         
         % vis - a structure of options for visualization
-        vis = struct('bVisualize', true,...
+        vis = struct('bVisualize', false,...
             'hFig', [],...
             'hAx', [],...
             'colors', [],...
@@ -77,8 +77,8 @@ classdef Mesh < handle
                 this.minLevel =  minLevel;
             end
             
-            this.cellMap = containers.Map('KeyType', 'int32', 'ValueType', 'any');
-            this.nodeMap = containers.Map('KeyType', 'char', 'ValueType', 'any');
+            this.cellMap = struct();
+            this.nodeMap = struct();
             
             if(this.vis.bVisualize)
                 this.vis.hFig = figure();
@@ -93,18 +93,18 @@ classdef Mesh < handle
         
         function delete(this)
             % delete - destructor: delete all the nodes and cells
-            keys = this.cellMap.keys;
+            keys = fieldnames(this.cellMap);
             for k = 1:length(keys)
-                cell = this.cellMap(keys{k});
+                cell = this.cellMap.(keys{k});
                 if(isvalid(cell))
                     delete(cell);
                 end
             end
             delete(this.cellMap);
             
-            keys = this.nodeMap.keys;
+            keys = fieldnames(this.nodeMap);
             for k = 1:length(keys)
-                node = this.nodeMap(keys{k});
+                node = this.nodeMap.(keys{k});
                 if(isvalid(node))
                     delete(node);
                 end
@@ -175,7 +175,7 @@ classdef Mesh < handle
             cell.setLevel(0);
             cell.setIndex([0,0]);
             cell.setNodes(nodeGrid);
-            this.cellMap(cell.getKey()) = cell;
+            this.cellMap.(cell.getKey()) = cell;
             
             if(this.vis.bVisualize)
                 rectangle(this.vis.hAx,...
@@ -187,7 +187,7 @@ classdef Mesh < handle
             % Store nodes
             for r = 1:2
                 for c = 1:2
-                    this.nodeMap(nodeGrid(r,c).getKey(this)) = nodeGrid(r,c);
+                    this.nodeMap.(nodeGrid(r,c).getKey(this)) = nodeGrid(r,c);
                 end
             end
             
@@ -218,20 +218,20 @@ classdef Mesh < handle
             bContinue = true;
             while(bContinue)
                 bContinue = level < this.minLevel;
-                keys = this.cellMap.keys;
+                keys = fieldnames(this.cellMap);
                 
                 for i = 1:length(keys)
                     
-                    if(this.cellMap(keys{i}).isSubdivided)
+                    if(this.cellMap.(keys{i}).isSubdivided)
                         % No need to check an already subdivided cell
                         continue;
                     end
                     
-                    if(level < this.minLevel || ~this.cellMap(keys{i}).isUniform())
+                    if(level < this.minLevel || ~this.cellMap.(keys{i}).isUniform())
                         
                         % Subdivide the non-uniform cell
                         [newCells, newNodes] = ...
-                            this.cellMap(keys{i}).subdivide(this,...
+                            this.cellMap.(keys{i}).subdivide(this,...
                             level >= this.minLevel);
                         
                         % If the subdivision succeeded, save the results;
@@ -263,22 +263,22 @@ classdef Mesh < handle
                             % Store the new Nodes
                             for n = 1:length(newNodes)
                                 key = newNodes(n).getKey(this);
-                                if(this.nodeMap.isKey(key))
+                                if(isfield(this.nodeMap, key))
                                     % Reassign "new" node to the existing node
-                                    newNodes(n) = this.nodeMap(key);
+                                    newNodes(n) = this.nodeMap.(key);
                                 else
                                     % Store the new node
-                                    this.nodeMap(key) = newNodes(n);
+                                    this.nodeMap.(key) = newNodes(n);
                                 end
                             end
 
                             % Store the new Cells
                             for c = 1:length(newCells)
                                 key = newCells(c).getKey();
-                                if(this.cellMap.isKey(key))
-                                    error('Duplicate key: %d', key);
+                                if(isfield(this.cellMap, key))
+                                    error('Duplicate key: %s', key);
                                 end
-                                this.cellMap(key) = newCells(c);
+                                this.cellMap.(key) = newCells(c);
                             end
                         end
                     end
@@ -308,13 +308,9 @@ classdef Mesh < handle
             %   cell = getCell(key) returns a cell identified by the "key".
             %   If no cell matching that key exists, the "cell" return
             %   value is an empty array.
-            
-            if(~isa(key, 'int32'))
-                error('Key must be an int32');
-            end
-            
-            if(this.cellMap.isKey(key))
-                cell = this.cellMap(key);
+                        
+            if(isfield(this.cellMap, key))
+                cell = this.cellMap.(key);
             else
                 cell = [];
             end
@@ -327,12 +323,8 @@ classdef Mesh < handle
             %   If no node matching that key exists, the "node" return
             %   value is an empty array.
             
-            if(~isa(key, 'char'))
-                error('Key must be a char array');
-            end
-            
-            if(this.nodeMap.isKey(key))
-                node = this.nodeMap(key);
+            if(isfield(this.nodeMap, key))
+                node = this.nodeMap.(key);
             else
                 node = [];
             end
