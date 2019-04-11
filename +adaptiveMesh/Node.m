@@ -7,6 +7,9 @@
 % Version: 9 April 2019
 classdef Node < handle & matlab.mixin.Copyable
     
+    % %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    % Properties
+    % %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     properties(GetAccess = public, SetAccess = protected)
         % state - the Node state, initially an empty array
         state

@@ -6,25 +6,33 @@
 % values associated with each of the nodes are all identical. A
 % "nonuniform" Cell is subdivided via the "subdivide" function.
 %
+% An index and level scheme from
+% <https://doi.org/10.1016/j.jcp.2010.08.023> is employed to facilitate
+% locating neighbors of each cell without navigation complicated linkage
+% trees.
+%
 % Author: Andrew Cox
 % Version: 9 April 2019
 classdef Cell < handle & matlab.mixin.Copyable
     
     properties(GetAccess = public, SetAccess = protected)
         
+        % level - the subdivision level. A lower number indicates a larger
+        % cell, with 0 as the minimum value
         level
         
+        % index - a 2-element index that locates this cell
         index
         
         % nodes - a matrix of nodes located at the corners of this cell
         %
         % The nodes are indexed by their location in cartesian space, i.e.,
         %
-        %   (1,1) ---- (1,2)
+        %   (1,2) ---- (2,2)
         %     |          |
         %     |          |
         %     |          |
-        %   (2,1) ---- (2,2)
+        %   (1,1) ---- (2,1)
         nodes
         
         
@@ -35,17 +43,11 @@ classdef Cell < handle & matlab.mixin.Copyable
         % coordinates
         size
         
-        % Minimum acceptable width
+        % minSize - Minimum acceptable width and height
         %
         % The cell wil not subdivide if doing so creates a cell with a
-        % width smaller than this size
-        minWidth = 1e-4;
-        
-        % Minimum acceptable height
-        %
-        % The cell will not subidivide if doing so creates a cell with a
-        % height smaller than this size
-        minHeight = 1e-4;
+        % width or height smaller than this size
+        minSize = [1e-4, 1e-4];
         
         % isSubdivided - whether or not this cell has been subdivided
         isSubdivided = false;
@@ -78,7 +80,7 @@ classdef Cell < handle & matlab.mixin.Copyable
         end
         
         function delete(this)
-            % Cell destructor
+            % delete - Cell destructor
             for n = 1:length(this.nodes)
                 if(isvalid(this.nodes(n)))
                     delete(this.nodes(n));
@@ -92,9 +94,9 @@ classdef Cell < handle & matlab.mixin.Copyable
             %   setNodes(nodes) accepts a 2x2 matrix of Node objects,
             % "nodes", with the nodes located in space consistent with
             % their location in the matrix, i.e., nodes(1,1) represents the
-            % top-left corner of the Cell, nodes(1,2) represents the
-            % top-right corner, nodes(2,1) is the bottom-left corner, and
-            % nodes(2,2) is the bottom-right corner.
+            % bottom-left corner of the Cell, nodes(1,2) represents the
+            % top-left corner, nodes(2,1) is the bottom-right corner, and
+            % nodes(2,2) is the top-right corner.
             
             if(~isa(nodes, 'adaptiveMesh.Node'))
                 error('Expecting matrix of Node objects');
@@ -107,13 +109,13 @@ classdef Cell < handle & matlab.mixin.Copyable
             this.nodes = nodes;
 
             % Compute the size of the node
-            r1 = this.nodes(1,1).getPosition();
-            r2 = this.nodes(1,2).getPosition();
-            r3 = this.nodes(2,1).getPosition();
-            this.position = r3;
-            this.size = [r2(1) - r1(1), r1(2) - r3(2)];
+            r1 = this.nodes(1,1).getPosition(); % bottom-left
+            r2 = this.nodes(1,2).getPosition(); % top-left
+            r3 = this.nodes(2,1).getPosition(); % bottom-right
+            this.position = r1;
+            this.size = [r3(1) - r1(1), r2(2) - r1(2)];
 
-            if(this.size(1) < 0 || this.size(2) < 0)
+            if(this.size(1) <= 0 || this.size(2) <= 0)
                 error('Nodes are not in correct order');
             end
         end
@@ -121,10 +123,21 @@ classdef Cell < handle & matlab.mixin.Copyable
         function [newCells, newNodes] = subdivide(this, mesh, bCueNeighbors)
             % subdivide - Split the cell into four smaller cells
             %
-            %   [newCells, newNodes] = subdivide() subdivides the cell into
-            %   four smaller cells as long as the new Cells do not violate
-            %   the minimum width or minimum height properties of this
-            %   Cell. The new Cells and new Nodes are returned 
+            %   [newCells, newNodes] = subdivide(mesh) subdivides the cell 
+            %   into four smaller cells as long as the new Cells do not 
+            %   violate the minimum width or minimum height properties of 
+            %   this Cell. All new cells and nodes created as a result of 
+            %   these subdivisions are returned in the "newCells" and 
+            %   "newNodes" arrays.
+            %
+            %   [newCells, newNodes] = subdivide(mesh, bCueNeighbors)
+            %   subdivides this cell, again accounting for the cell size
+            %   limits as described above. Additionally, if the
+            %   bCueNeighbors argument is set to TRUE, the subdivision of
+            %   this cell may cue the subdivision of neighboring cells; all
+            %   new cells and nodes created as a result of these
+            %   subdivisions are returned in the "newCells" and "newNodes"
+            %   arrays.
             
             newCells = [];
             newNodes = [];
@@ -148,8 +161,8 @@ classdef Cell < handle & matlab.mixin.Copyable
                 error('bNeighborCatalyst must be logical (a boolean)');
             end
             
-            if(this.size(1)/2 > this.minWidth &&...
-                    this.size(2)/2 > this.minHeight)
+            if(this.size(1)/2 > this.minSize(1) &&...
+                    this.size(2)/2 > this.minSize(2))
                 
                 % Coordinates of the center of the cell
                 xMid = this.position(1) + 0.5*this.size(1);
@@ -162,9 +175,9 @@ classdef Cell < handle & matlab.mixin.Copyable
                 % new cells represented by numbers:
                 %
                 %   o --- 2 --- o
-                %   |  A  |  B  |
-                %   4 --- 1 --- 5
                 %   |  C  |  D  |
+                %   4 --- 1 --- 5
+                %   |  A  |  B  |
                 %   o --- 3 --- o
                 newNodes = [copy(this.nodes(1,1)), copy(this.nodes(1,1)), ...
                     copy(this.nodes(1,1)), copy(this.nodes(1,1)), ...
@@ -190,13 +203,13 @@ classdef Cell < handle & matlab.mixin.Copyable
                 cellD = copy(cellA);
                 
                 % Initialize new Cells, labeled in the ascii art above
-                cellA.setNodes([this.nodes(1,1), newNodes(2); newNodes(4), newNodes(1)]);
+                cellA.setNodes([this.nodes(1,1), newNodes(4); newNodes(3), newNodes(1)]);
                 cellA.setIndex(childIndices{1,1});
-                cellB.setNodes([newNodes(2), this.nodes(1,2); newNodes(1), newNodes(5)]);
-                cellB.setIndex(childIndices{1,2});
-                cellC.setNodes([newNodes(4), newNodes(1); this.nodes(2,1), newNodes(3)]);
-                cellC.setIndex(childIndices{2,1});
-                cellD.setNodes([newNodes(1), newNodes(5); newNodes(3), this.nodes(2,2)]);
+                cellB.setNodes([newNodes(3), newNodes(1); this.nodes(2,1), newNodes(5)]);
+                cellB.setIndex(childIndices{2,1});
+                cellC.setNodes([newNodes(4), this.nodes(1,2); newNodes(1), newNodes(2)]);
+                cellC.setIndex(childIndices{1,2});
+                cellD.setNodes([newNodes(1), newNodes(2); newNodes(5), this.nodes(2,2)]);
                 cellD.setIndex(childIndices{2,2});
                 
                 % Output the new cells and nodes
@@ -238,33 +251,36 @@ classdef Cell < handle & matlab.mixin.Copyable
             isUniform = true;
         end
         
-        function setMinWidth(this, minWidth)
-            % setMinWidth - set the minimum acceptable Cell width
+        function setMinSize(this, minSize)
+            % setMinSize - set the minimum acceptable Cell size
             %
-            %   setMinWidth(minWidth) defines the minimum cell width, i.e.,
-            %   the smallest width a cell can have. This width limits the
-            %   "subdivide()" function
+            %   setMinSize(minSize) defines the minimum cell width and
+            %   height, i.e., minSize = [minWidth, minHeight]. This size
+            %   limits the "subdivide()" function
             %
-            % See also: setMinHeight, subdivide
-            this.minWidth = minWidth;
+            % See also: minSize, subdivide
+            
+            this.minSize = minSize;
         end
         
-        function setMinHeight(this, minHeight)
-            % setMinHeight - set the minimum acceptable Cell height
+        function setLevel(this, level)
+            % setLevel - set the level of this cell.
             %
-            %   setMinHeight(minHeight) defines the minimum cell height,
-            %   i.e., the smallest height a cell can have. This height
-            %   limits the "subdivide() function
-            %
-            % See also: setMinWidth, subdivide
-            this.minHeight = minHeight;
-        end
-        
-        function setLevel(this, level)            
+            %   setLevel(level) sets the level of the cell to the specified
+            %   value. This level should be consistent with the definitions
+            %   described in the paper,
+            %   <https://doi.org/10.1016/j.jcp.2010.08.023>
+            
             this.level = level;
         end
         
         function setIndex(this, index)
+            % setIndex - Set the index of this cell
+            %
+            %   setIndex(index) sets the index of this cell. The index
+            %   should be consistent with the definitions described in the
+            %   paper, <https://doi.org/10.1016/j.jcp.2010.08.023>
+            
             if(size(index,1)*size(index,2) ~= 2)
                 error('Expecting 2-element array');
             end
@@ -279,31 +295,55 @@ classdef Cell < handle & matlab.mixin.Copyable
             %   arranged in spatial order:
             %
             %       o --- o --- o
-            %       |  A  |  B  |
+            %       |(1,2)|(2,2)|
             %       o --- o --- o
-            %       |  C  |  D  |
+            %       |(1,1)|(2,1)|
             %       o --- o --- o 
+            %
+            %   where the outer-most boundary is the boundary of this cell
+            %   and the inner boundaries bound the child cells. This
+            %   indexing strategy is described in the paper,
+            %   <https://doi.org/10.1016/j.jcp.2010.08.023>
             
             if(length(this.index) < 2)
                 keyboard;
             end
             
             childIndices = cell(2,2);
-            childIndices{1,1} = [2*this.index(1) + 0, 2*this.index(2) + 1];
-            childIndices{1,2} = [2*this.index(1) + 1, 2*this.index(2) + 1];
-            childIndices{2,1} = [2*this.index(1) + 0, 2*this.index(2) + 0];
-            childIndices{2,2} = [2*this.index(1) + 1, 2*this.index(2) + 0];
+            childIndices{1,1} = [2*this.index(1) + 0, 2*this.index(2) + 0];
+            childIndices{1,2} = [2*this.index(1) + 0, 2*this.index(2) + 1];
+            childIndices{2,1} = [2*this.index(1) + 1, 2*this.index(2) + 0];
+            childIndices{2,2} = [2*this.index(1) + 1, 2*this.index(2) + 1];
         end
         
         function parentIndex = getParentIndex(this)
+            % getParentIndex - get the index of this cell's parent
+            %
+            %   parentIndex = getParentIndex()
+            %
+            % See also: computeParentIndex
             parentIndex = adaptiveMesh.Cell.computeParentIndex(this.index);
         end
         
         function key = getKey(this)
+            % getKey - Get the unique key that identifies this Cell
+            %
+            %   key = getKey()
+            %
+            % See also: computeKey
             key = adaptiveMesh.Cell.computeKey(this.level, this.index);
         end
         
         function neighbors = getNeighbors(this, mesh, bNoSmaller)
+            % getNeighbors - Get the neighbors of this cell
+            %
+            %   neighbors = getNeighbors(mesh) computes all neighbors of
+            %   this cell.
+            %
+            %   neighbors = getNeighbors(mesh, bNoSmaller) computes all the
+            %   neighbors of the cell, excluding those neighbors that are
+            %   smaller (i.e., have a higher level) than this cell
+            
             sameLevelNeighbors = [this.index(1) - 1, this.index(2); % left
                 this.index(1), this.index(2) + 1; % top
                 this.index(1) + 1, this.index(2); % right
@@ -332,23 +372,23 @@ classdef Cell < handle & matlab.mixin.Copyable
                             case 1
                                 % Neighbor is to the left, get right-side
                                 neighbors(end+1:end+3) =...
-                                    [mesh.getCell(adaptiveMesh.Cell.computeKey(this.level+1, kidsIx(1,2))),...
+                                    [mesh.getCell(adaptiveMesh.Cell.computeKey(this.level+1, kidsIx(2,1))),...
                                     mesh.getCell(adaptiveMesh.Cell.computeKey(this.level+1, kidsIx(2,2)))];
                             case 2
                                 % Neighbor is above, get bottom-side
                                 neighbors(end+1:end+3) =...
-                                    [mesh.getCell(adaptiveMesh.Cell.computeKey(this.level+1, kidsIx(2,1))),...
-                                    mesh.getCell(adaptiveMesh.Cell.computeKey(this.level+1, kidsIx(2,2)))];
+                                    [mesh.getCell(adaptiveMesh.Cell.computeKey(this.level+1, kidsIx(1,1))),...
+                                    mesh.getCell(adaptiveMesh.Cell.computeKey(this.level+1, kidsIx(2,1)))];
                             case 3
                                 % Neighbor is to the right, get left-side
                                 neighbors(end+1:end+3) =...
                                 	[mesh.getCell(adaptiveMesh.Cell.computeKey(this.level+1, kidsIx(1,1))),...
-                                    mesh.getCell(adaptiveMesh.Cell.computeKey(this.level+1, kidsIx(2,1)))];
+                                    mesh.getCell(adaptiveMesh.Cell.computeKey(this.level+1, kidsIx(1,2)))];
                             case 4
                                 % Neighbor is below, get top-side
                                 neighbors(end+1:end+3) =...
-                                    [mesh.getCell(adaptiveMesh.Cell.computeKey(this.level+1, kidsIx(1,1))),...
-                                    mesh.getCell(adaptiveMesh.Cell.computeKey(this.level+1, kidsIx(1,2)))];
+                                    [mesh.getCell(adaptiveMesh.Cell.computeKey(this.level+1, kidsIx(1,2))),...
+                                    mesh.getCell(adaptiveMesh.Cell.computeKey(this.level+1, kidsIx(2,2)))];
                         end
                         
                     else
@@ -411,6 +451,13 @@ classdef Cell < handle & matlab.mixin.Copyable
     % %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     methods(Static, Access = public)
         function key = computeKey(level, index)
+            % computeKey - Get a unique key that identifies this cell
+            %
+            %   key = computeKey(level, index) computes a unique key for a
+            %   cell at the specified level and index. This method is
+            %   described in the paper,
+            %   <https://doi.org/10.1016/j.jcp.2010.08.023>
+            
             key = 0;
             for l = 0:level-1
                 key = key + (2^l * 2^l);
@@ -419,6 +466,13 @@ classdef Cell < handle & matlab.mixin.Copyable
         end
         
         function parentIndex = computeParentIndex(childIndex)
+            % computeParentIndex - get the index of a cell's parent
+            %
+            %   parentIndex = computeParentIndex(childIndex) computes the
+            %   index of the parent of a child with the index "childIndex."
+            %   This method is described in the paper,
+            %   <https://doi.org/10.1016/j.jcp.2010.08.023>
+            
             parentIndex = [floor(childIndex(1)/2), floor(childIndex(2)/2)];
         end
     end
@@ -427,7 +481,9 @@ classdef Cell < handle & matlab.mixin.Copyable
     % Protected Methods
     % %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     methods(Access = protected)
+        
         function cpObj = copyElement(this)
+            % copyElement - make a deep copy of the Cell and its Nodes
             
             % Make a shallow copy
             cpObj = copyElement@matlab.mixin.Copyable(this);
