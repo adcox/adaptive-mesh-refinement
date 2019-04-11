@@ -100,7 +100,6 @@ classdef Mesh < handle
                     delete(cell);
                 end
             end
-            delete(this.cellMap);
             
             keys = fieldnames(this.nodeMap);
             for k = 1:length(keys)
@@ -109,7 +108,6 @@ classdef Mesh < handle
                     delete(node);
                 end
             end
-            delete(this.nodeMap);
         end
         
         function initMesh(this, bounds, templateNode, templateCell)
