@@ -1,4 +1,4 @@
-classdef TestNode < adaptiveMesh.Node
+classdef ToyNode < adaptiveMesh.Node
     
     methods(Access = public)
         function metric = getMetric(this)

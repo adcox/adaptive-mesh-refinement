@@ -5,7 +5,7 @@ templateNode = TestNode();
 
 %% Create the mesh and refine it
 mapMesh = adaptiveMesh.Mesh();
-mapMesh.setMinCellSize([5e-2, 5e-2]);
+mapMesh.setMinCellSize([2e-2, 2e-2]);
 mapMesh.initMesh(bounds, templateNode);
 mapMesh.refine();
 
@@ -20,6 +20,25 @@ for r = 1:N
     mapData.metric(r) = mapMesh.nodeMap.(keys{r}).getMetric();
 end
 
+%% Check Data
+cellKeys = fieldnames(mapMesh.cellMap);
+failingKeys = {};
+for c = 1:length(cellKeys)   
+    cell = mapMesh.cellMap.(cellKeys{c});
+        
+    if(~cell.isSubdivided)
+        neighbors = cell.getNeighbors(mapMesh);
+
+        for n = 1:length(neighbors)
+            if(abs(neighbors(n).level - cell.level) > 1)
+                failingKeys{end+1} = cellKeys{c};
+                break;
+            end
+    %         assert(abs(neighbors(n).level - cell.level) <= 1)
+        end
+    end
+end
+
 %% Plot Results
 colors = lines(length(unique(mapData.metric)));
 
@@ -32,6 +51,10 @@ for c = 1:length(keys)
     if(~cell.isSubdivided)
         rectangle('position', [cell.position, cell.size],...
             'edgeColor', 'k', 'linewidth', 0.5);
+        if(sum(cellfun(@(a)strcmp(keys{c}, a), failingKeys)) > 0)
+            plot([cell.position(1), cell.position(1) + cell.size(1)], ...
+                [cell.position(2), cell.position(2) + cell.size(2)], 'r');
+        end
     end
 end
 scatter(mapData.ics(:,1), mapData.ics(:,2), 16, mapData.metric, 'filled');

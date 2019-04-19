@@ -104,11 +104,11 @@ classdef Cell < handle & matlab.mixin.Copyable
             % nodes(2,2) is the top-right corner.
             
             if(~isa(nodes, 'adaptiveMesh.Node'))
-                error('Expecting matrix of Node objects');
+                error('adaptiveMesh:Cell:type', 'Expecting matrix of Node objects');
             end
 
             if(sum(size(nodes) == [2,2]) ~= 2)
-                error('Expecting 2x2 matrix');
+                error('adaptiveMesh:Cell:size', 'Expecting 2x2 matrix');
             end
 
             this.nodes = nodes;
@@ -121,7 +121,7 @@ classdef Cell < handle & matlab.mixin.Copyable
             this.size = [r3(1) - r1(1), r2(2) - r1(2)];
 
             if(this.size(1) <= 0 || this.size(2) <= 0)
-                error('Nodes are not in correct order');
+                error('adaptiveMesh:Cell', 'Nodes are not in correct order');
             end
         end
         
@@ -221,17 +221,28 @@ classdef Cell < handle & matlab.mixin.Copyable
                 this.isSubdivided = true;
                 newCells = [cellA, cellB, cellC, cellD];
                 
-                % Get the neighbors of this cell that are larger or the
-                % same size
                 if(bCueNeighbors)
+                    % Get the neighbors of this cell that are larger or the
+                    % same size
                     neighbors = this.getNeighbors(mesh, true);
                     for n = 1:length(neighbors)
-                        [otherCells, otherNodes] = neighbors(n).subdivide(mesh, false);
-                        if(~isempty(otherCells))
-                            newCells(end+1:end+length(otherCells)) = otherCells;
-                        end
-                        if(~isempty(otherNodes))
-                            newNodes(end+1:end+length(otherNodes)) = otherNodes;
+                        % Filter out neighbors that have already been
+                        % subdivided or are smaller (higher level) than
+                        % this cell
+                        if(~neighbors(n).isSubdivided && neighbors(n).level < this.level)
+                            
+                            % Subdivide the neighbors to ensure the largest
+                            % level difference between cells is 1; this
+                            % acts recursively
+                            [otherCells, otherNodes] = neighbors(n).subdivide(mesh, true);
+                            
+                            % Add the new cells and new nodes to the mesh
+                            if(~isempty(otherCells))
+                                newCells(end+1:end+length(otherCells)) = otherCells;
+                            end
+                            if(~isempty(otherNodes))
+                                newNodes(end+1:end+length(otherNodes)) = otherNodes;
+                            end
                         end
                     end
                 end
@@ -354,6 +365,10 @@ classdef Cell < handle & matlab.mixin.Copyable
             %   neighbors of the cell, excluding those neighbors that are
             %   smaller (i.e., have a higher level) than this cell
             
+            if(nargin < 3)
+                bNoSmaller = false;
+            end
+            
             sameLevelNeighbors = [this.index(1) - 1, this.index(2); % left
                 this.index(1), this.index(2) + 1; % top
                 this.index(1) + 1, this.index(2); % right
@@ -381,24 +396,24 @@ classdef Cell < handle & matlab.mixin.Copyable
                         switch(n)
                             case 1
                                 % Neighbor is to the left, get right-side
-                                neighbors(end+1:end+3) =...
-                                    [mesh.getCell(adaptiveMesh.Cell.computeKey(this.level+1, kidsIx(2,1))),...
-                                    mesh.getCell(adaptiveMesh.Cell.computeKey(this.level+1, kidsIx(2,2)))];
+                                neighbors(end+1:end+2) =...
+                                    [mesh.getCell(adaptiveMesh.Cell.computeKey(this.level+1, kidsIx{2,1})),...
+                                    mesh.getCell(adaptiveMesh.Cell.computeKey(this.level+1, kidsIx{2,2}))];
                             case 2
                                 % Neighbor is above, get bottom-side
-                                neighbors(end+1:end+3) =...
-                                    [mesh.getCell(adaptiveMesh.Cell.computeKey(this.level+1, kidsIx(1,1))),...
-                                    mesh.getCell(adaptiveMesh.Cell.computeKey(this.level+1, kidsIx(2,1)))];
+                                neighbors(end+1:end+2) =...
+                                    [mesh.getCell(adaptiveMesh.Cell.computeKey(this.level+1, kidsIx{1,1})),...
+                                    mesh.getCell(adaptiveMesh.Cell.computeKey(this.level+1, kidsIx{2,1}))];
                             case 3
                                 % Neighbor is to the right, get left-side
-                                neighbors(end+1:end+3) =...
-                                	[mesh.getCell(adaptiveMesh.Cell.computeKey(this.level+1, kidsIx(1,1))),...
-                                    mesh.getCell(adaptiveMesh.Cell.computeKey(this.level+1, kidsIx(1,2)))];
+                                neighbors(end+1:end+2) =...
+                                	[mesh.getCell(adaptiveMesh.Cell.computeKey(this.level+1, kidsIx{1,1})),...
+                                    mesh.getCell(adaptiveMesh.Cell.computeKey(this.level+1, kidsIx{1,2}))];
                             case 4
                                 % Neighbor is below, get top-side
-                                neighbors(end+1:end+3) =...
-                                    [mesh.getCell(adaptiveMesh.Cell.computeKey(this.level+1, kidsIx(1,2))),...
-                                    mesh.getCell(adaptiveMesh.Cell.computeKey(this.level+1, kidsIx(2,2)))];
+                                neighbors(end+1:end+2) =...
+                                    [mesh.getCell(adaptiveMesh.Cell.computeKey(this.level+1, kidsIx{1,2})),...
+                                    mesh.getCell(adaptiveMesh.Cell.computeKey(this.level+1, kidsIx{2,2}))];
                         end
                         
                     else
@@ -485,6 +500,25 @@ classdef Cell < handle & matlab.mixin.Copyable
             %   <https://doi.org/10.1016/j.jcp.2010.08.023>
             
             parentIndex = [floor(childIndex(1)/2), floor(childIndex(2)/2)];
+        end
+        
+        function index = computeIndexFromPos(pos, level, mesh)
+            % computeIndexFromPos - get cell index from its posistion
+            %
+            %   index = computeIndexFromPos(pos, level, mesh) computes the
+            %   index of a cell with its bottom-left corner at the
+            %   position, "pos," and level, "level." The mesh input, an
+            %   adaptiveMesh.Mesh object, stores the mesh size and
+            %   position, which are necessary to convert the cell position
+            %   into the index.
+            
+            if(~isa(mesh, 'adaptiveMesh.Mesh'))
+                error('Expecting adaptiveMesh.Mesh object');
+            end
+            
+            index = [0,0];
+            index(1) = (pos(1) - mesh.position(1))*2^level / mesh.size(1);
+            index(2) = (pos(2) - mesh.position(2))*2^level / mesh.size(2);
         end
     end
     
