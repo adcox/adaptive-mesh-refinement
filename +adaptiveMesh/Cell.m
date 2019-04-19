@@ -249,7 +249,7 @@ classdef Cell < handle & matlab.mixin.Copyable
             end
         end
         
-        function isUniform = isUniform(this)
+        function isUniform = isUniform(this, mesh)
             % isUniform - Determine if the cell is uniform
             %
             %   tf = isUniform() returns true if the metrics associated with
@@ -264,6 +264,38 @@ classdef Cell < handle & matlab.mixin.Copyable
                     end
                 end
             end
+            
+            % If this cell is large enough to subdivide, check intermediate
+            % edge points. We only check the points halfway between the
+            % corner nodes since the subdivision strategy guarantees that
+            % adjacent nodes are only one level different
+            if(this.size(1)/2 > this.minSize(1) &&...
+                    this.size(2)/2 > this.minSize(2))
+                
+                % Coordinates of the center of the cell
+                xMid = this.position(1) + 0.5*this.size(1);
+                yMid = this.position(2) + 0.5*this.size(2);
+
+                % Coordinates of the mid-points of each edge
+                midEdgePos = [...
+                    xMid, this.position(2) + this.size(2);
+                    xMid, this.position(2);
+                    this.position(1), yMid
+                    this.position(1) + this.size(1), yMid];
+                
+                % Try to get each mid-edge-point; if it exists, check its
+                % value for consistency
+                for n = 1:4
+                    edgeNode = mesh.getNodeFromPos(midEdgePos(n,:));
+                    if(~isempty(edgeNode))
+                        if(edgeNode.getMetric() ~= value)
+                            isUniform = false;
+                            return;
+                        end
+                    end
+                end
+            end
+            
             isUniform = true;
         end
         

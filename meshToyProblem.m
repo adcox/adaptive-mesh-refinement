@@ -1,11 +1,12 @@
 clear; clc; close all;
+addpath tests;
 
 bounds = [-1, 1, -1, 1];
-templateNode = TestNode();
+templateNode = ToyNode();
 
 %% Create the mesh and refine it
 mapMesh = adaptiveMesh.Mesh();
-mapMesh.setMinCellSize([2e-2, 2e-2]);
+mapMesh.setMinCellSize([1e-2, 1e-2]);
 mapMesh.initMesh(bounds, templateNode);
 mapMesh.refine();
 
@@ -42,8 +43,10 @@ end
 %% Plot Results
 colors = lines(length(unique(mapData.metric)));
 
-figure(); hold on;
+hFig = figure(); hold on;
 colormap(colors);
+hcb = colorbar;
+
 keys = fieldnames(mapMesh.cellMap);
 for c = 1:length(keys)
     % Plot cells
@@ -59,3 +62,12 @@ for c = 1:length(keys)
 end
 scatter(mapData.ics(:,1), mapData.ics(:,2), 16, mapData.metric, 'filled');
 hold off; grid on; axis equal;
+
+%% Get Image
+figure();
+colormap(colors);
+hcb = colorbar;
+[xData, yData, CData] = mapMesh.toImage();
+image(xData, yData, CData, 'CDataMapping', 'scaled');
+axis equal;
+set(gca, 'XDir', 'norma', 'YDir', 'normal');

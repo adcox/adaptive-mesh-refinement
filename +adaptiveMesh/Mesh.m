@@ -56,6 +56,9 @@ classdef Mesh < handle
         % completed before a resulting "sub-cell" is smaller than the
         % "minCellSize."
         trueMinCellSize
+        
+        nMaxPtsX
+        nMaxPtsY
     end
     
     methods(Access = public)
@@ -151,11 +154,12 @@ classdef Mesh < handle
                 floor( log(this.size(1)/this.minCellSize(1))/log(2) ));
             nMaxHDivisions = max(this.minLevel,...
                 floor(log(this.size(2)/this.minCellSize(2))/log(2) ));
-            nMaxPtsX = 2^nMaxWDivisions;
-            nMaxPtsY = 2^nMaxHDivisions;
+            this.nMaxPtsX = 2^nMaxWDivisions + 1;
+            this.nMaxPtsY = 2^nMaxHDivisions + 1;
             
             % Compute true minimum width and height
-            this.trueMinCellSize = this.minCellSize./[nMaxPtsX, nMaxPtsY];
+            this.trueMinCellSize = this.size./...
+                [(this.nMaxPtsX - 1), (this.nMaxPtsY - 1)];
             
             % Initialize four boundary nodes
             nodeGrid(2,2) = copy(templateNode);
@@ -219,17 +223,17 @@ classdef Mesh < handle
                 keys = fieldnames(this.cellMap);
                 
                 for i = 1:length(keys)
+                    cell = this.cellMap.(keys{i});
                     
-                    if(this.cellMap.(keys{i}).isSubdivided)
+                    if(cell.isSubdivided)
                         % No need to check an already subdivided cell
                         continue;
                     end
                     
-                    if(level < this.minLevel || ~this.cellMap.(keys{i}).isUniform())
+                    if(level < this.minLevel || ~cell.isUniform(this))
                         
                         % Subdivide the non-uniform cell
-                        [newCells, newNodes] = ...
-                            this.cellMap.(keys{i}).subdivide(this,...
+                        [newCells, newNodes] = cell.subdivide(this,...
                             level >= this.minLevel);
                         
                         % If the subdivision succeeded, save the results;
@@ -337,6 +341,57 @@ classdef Mesh < handle
             %   array.
             key = adaptiveMesh.Node.computeKey(this, pos);
             node = this.getNode(key);
+        end
+        
+        function [xData, yData, CData] = toImage(this)
+            % toImage - convert the mesh to an image
+            
+            % Create the xData and yData arrays that span the mesh
+            x0 = this.position(1);
+            y0 = this.position(2);
+            w = this.size(1);
+            h = this.size(2);
+            
+            xData = linspace(x0, x0+w, this.nMaxPtsX);
+            yData = linspace(y0, y0+h, this.nMaxPtsY);
+            CData = zeros(this.nMaxPtsX, this.nMaxPtsY);
+            
+            % Loop through the cells
+            cellkeys = fieldnames(this.cellMap);
+            for k = 1:length(cellkeys)
+                cell = this.cellMap.(cellkeys{k});
+                
+                % Only need to process the cells that have not subdivided
+                if(~cell.isSubdivided)
+                    % Get the indices of the two corner nodes
+                    ix0 = cell.nodes(1,1).getKey(this); % bottom-left
+                    ixf = cell.nodes(2,2).getKey(this); % top-right
+                    splitIx0 = strsplit(ix0(2:end), '_');
+                    splitIxf = strsplit(ixf(2:end), '_');
+                    ix_x0 = str2double(splitIx0(1)); % minimum x index
+                    ix_y0 = str2double(splitIx0(2)); % minimum y index
+                    ix_xf = str2double(splitIxf(1)); % maximum x index
+                    ix_yf = str2double(splitIxf(2)); % maximum y index
+                    
+                    if(ix_xf - ix_x0 == 1 && ix_yf - ix_y0 == 1)
+                        % If the cell only one index wide and tall, it is the
+                        % smallest possible cell and may have corners with
+                        % different metrics
+                        CData(ix_x0+1, ix_y0+1) = cell.nodes(1,1).getMetric();
+                        CData(ix_x0+1, ix_yf+1) = cell.nodes(1,2).getMetric();
+                        CData(ix_xf+1, ix_y0+1) = cell.nodes(2,1).getMetric();
+                        CData(ix_xf+1, ix_yf+1) = cell.nodes(2,2).getMetric();
+                    else
+                        % If the cell is larger, it must be uniform, so
+                        % assign a uniform value to all possible points
+                        % within the cell bounds
+                        one = ones(ix_xf - ix_x0 + 1, ix_yf - ix_y0 + 1);
+                        CData((ix_x0:ix_xf) + 1, (ix_y0:ix_yf) + 1) =...
+                            one*cell.nodes(1,1).getMetric();
+
+                    end
+                end
+            end
         end
     end
     
