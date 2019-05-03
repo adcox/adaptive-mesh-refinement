@@ -304,6 +304,22 @@ classdef Mesh < handle
             this.minCellSize = minSize;
         end
         
+        function setMinLevel(this, minLevel)
+            % setMinLevel - set the minimum level of refinement
+            %
+            %   setMinLevel(minLevel) sets the minimum level of refinement
+            %   to "minLevel". When the mesh is initialized to a single
+            %   cell, the mesh level is 0. Each subdivision of a cell
+            %   increases its level. For example, subdividing the original
+            %   cell into four smaller cells yields four cells at level 1.
+            %   Similarly, subdividing one of those cells yields four cells
+            %   at level 2. The mesh refinement continues the
+            %   entire mesh is subdivided into cells at or above the
+            %   specified "minLevel"; by default, minLevel is set to 3.
+            
+            this.minLevel = minLevel;
+        end
+        
         function cell = getCell(this, key)
             % getCell - retrieve a cell via its key
             %

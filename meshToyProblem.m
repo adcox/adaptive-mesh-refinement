@@ -1,5 +1,5 @@
 clear; clc; close all;
-addpath tests;
+addpath tests;  % The ToyNode class is located here
 
 bounds = [-1, 1, -1, 1];
 templateNode = ToyNode();
@@ -13,39 +13,20 @@ mapMesh.refine();
 %% Extract data
 keys = fieldnames(mapMesh.nodeMap);
 N = length(keys);
-mapData = struct();
-mapData.ics = zeros(N,2);
-mapData.metric = zeros(N,1);
+meshData = struct();
+meshData.pos = zeros(N,2);
+meshData.metric = zeros(N,1);
 for r = 1:N
-    mapData.ics(r,:) = mapMesh.nodeMap.(keys{r}).state;
-    mapData.metric(r) = mapMesh.nodeMap.(keys{r}).getMetric();
-end
-
-%% Check Data
-cellKeys = fieldnames(mapMesh.cellMap);
-failingKeys = {};
-for c = 1:length(cellKeys)   
-    cell = mapMesh.cellMap.(cellKeys{c});
-        
-    if(~cell.isSubdivided)
-        neighbors = cell.getNeighbors(mapMesh);
-
-        for n = 1:length(neighbors)
-            if(abs(neighbors(n).level - cell.level) > 1)
-                failingKeys{end+1} = cellKeys{c};
-                break;
-            end
-    %         assert(abs(neighbors(n).level - cell.level) <= 1)
-        end
-    end
+    meshData.pos(r,:) = mapMesh.nodeMap.(keys{r}).state;
+    meshData.metric(r) = mapMesh.nodeMap.(keys{r}).getMetric();
 end
 
 %% Plot Results
-colors = lines(length(unique(mapData.metric)));
+colors = lines(length(unique(meshData.metric)));
 
 hFig = figure(); hold on;
 colormap(colors);
-hcb = colorbar;
+colorbar;
 
 keys = fieldnames(mapMesh.cellMap);
 for c = 1:length(keys)
@@ -54,16 +35,15 @@ for c = 1:length(keys)
     if(~cell.isSubdivided)
         rectangle('position', [cell.position, cell.size],...
             'edgeColor', 'k', 'linewidth', 0.5);
-        if(sum(cellfun(@(a)strcmp(keys{c}, a), failingKeys)) > 0)
-            plot([cell.position(1), cell.position(1) + cell.size(1)], ...
-                [cell.position(2), cell.position(2) + cell.size(2)], 'r');
-        end
     end
 end
-scatter(mapData.ics(:,1), mapData.ics(:,2), 16, mapData.metric, 'filled');
+% Plot the nodes, colored by their metric
+scatter(meshData.pos(:,1), meshData.pos(:,2), 16, meshData.metric, 'filled');
 hold off; grid on; axis equal;
+xlabel('x');
+ylabel('y');
 
-%% Get Image
+%% Plot the mesh as an image
 figure();
 colormap(colors);
 hcb = colorbar;
