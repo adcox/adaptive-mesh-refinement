@@ -49,5 +49,5 @@ Each of these commands opens the MATLAB web browser to view HTML class documenta
 ### Acknowledgements
 This software employs an indexing strategy found in the following paper:
 
-* Ji, H., Lien, F.-S., and Yee, E., "A new adaptive mesh refinement data structure with an application to detonation", *Journal of Computational Physics*, 229(**23**), 20 November 2010, pp. 8981--8993. DOI: [10.1016/j.jcp.2010.08.023](https://doi.org/10.1016/j.jcp.2010.08.023)
+* Ji, H., Lien, F.-S., and Yee, E., "A new adaptive mesh refinement data structure with an application to detonation", *Journal of Computational Physics*, 229(**23**), 20 November 2010, pp. 8981&endash;8993. DOI: [10.1016/j.jcp.2010.08.023](https://doi.org/10.1016/j.jcp.2010.08.023)
 
