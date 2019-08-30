@@ -50,4 +50,4 @@ hcb = colorbar;
 [xData, yData, CData] = mapMesh.toImage();
 image(xData, yData, CData, 'CDataMapping', 'scaled');
 axis equal;
-set(gca, 'XDir', 'norma', 'YDir', 'normal');
+set(gca, 'XDir', 'normal', 'YDir', 'normal');
