@@ -26,7 +26,6 @@ colors = lines(length(unique(meshData.metric)));
 
 hFig = figure(); hold on;
 colormap(colors);
-colorbar;
 
 keys = fieldnames(mapMesh.cellMap);
 for c = 1:length(keys)
@@ -42,11 +41,15 @@ scatter(meshData.pos(:,1), meshData.pos(:,2), 16, meshData.metric, 'filled');
 hold off; grid on; axis equal;
 xlabel('x');
 ylabel('y');
+hcb = colorbar;
+caxis([-0.5, 1.5]);
+set(hcb, 'ticks', [0, 1]);
 
 %% Plot the mesh as an image
 figure();
 colormap(colors);
 hcb = colorbar;
+caxis([-0.5, 1.5]);
 [xData, yData, CData] = mapMesh.toImage();
 image(xData, yData, CData, 'CDataMapping', 'scaled');
 axis equal;

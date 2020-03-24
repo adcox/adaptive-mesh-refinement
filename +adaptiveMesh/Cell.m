@@ -163,7 +163,7 @@ classdef Cell < handle & matlab.mixin.Copyable
             if(nargin < 3)
                 bCueNeighbors = false;
             elseif(~islogical(bCueNeighbors))
-                error('bNeighborCatalyst must be logical (a boolean)');
+                error('bCueNeighbors must be logical (a boolean)');
             end
             
             if(this.size(1)/2 > this.minSize(1) &&...
